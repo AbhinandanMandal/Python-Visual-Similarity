@@ -1,44 +1,48 @@
 import logging
-from collections.abc import Iterable
+from typing import Any, ClassVar, cast
 
 import numpy as np
 
-from .._base_classes import SimilarityMetric
-from .._utils import cosine_similarity, read_image_rgb
 from ..typing import (
-    Float32NumpyArray,
     FloatNumpyArray,
     ImageInput,
-    SimilarityFunc,
 )
-from ._base_encoder import ImageEncoderBase, check_desired_output
+from ._base_encoder import ImageEncoderBase
 from .utils import iter_images
 
+#: On-disk format version of the serialised pipeline state.
+_PIPELINE_FORMAT_VERSION = 1
 
-class Pipeline(SimilarityMetric):
+
+class Pipeline(ImageEncoderBase):
     """
     A pipeline for computing feature vectors using a set of
-    descriptor-based encoders (e.g., VLAD, Fisher, etc.).
+    encoders.
 
     Currently, all vectors computed using the Encoders listed
     will always be flattened, because different Encoders also
     have different output sizes.
 
     :param encoders: A list of ImageEncoderBase instances.
-    :param similarity_func: A function that takes two batches of vectors and returns a similarity score
-    matrix with size (batch_1_size, batch_2_size).
+    :param similarity_func: Name of the built-in similarity metric to use. One of
+        ``"cosine"`` (default), ``"euclidean"``, ``"l1"`` or ``"manhattan"``.
     """
 
     _logger = logging.getLogger("Pipeline")
 
+    #: Keys a serialised state must contain to be a valid pipeline file.
+    _STATE_KEYS: ClassVar[frozenset[str]] = frozenset(
+        {"encoder_class", "encoders", "similarity_func"}
+    )
+
     def __init__(
         self,
         encoders: list[ImageEncoderBase],
-        similarity_func: SimilarityFunc = cosine_similarity,
+        similarity_func: str = "cosine",
     ):
         self._check_valid_encoders(encoders)
         self.encoders = encoders
-        self._similarity_func = similarity_func
+        super().__init__(similarity_func=similarity_func)
 
     def _check_valid_encoders(self, encoders: list[ImageEncoderBase]) -> None:
         """
@@ -50,6 +54,42 @@ class Pipeline(SimilarityMetric):
                 raise ValueError(
                     f"Pipeline only accepts instances of ImageEncoderBase, not {type(encoder)}"
                 )
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Serialises the pipeline into a JSON-safe state dictionary.
+
+        Each member encoder is serialised with its own
+        :meth:`~pyvisim.encoders.ImageEncoderBase.to_dict`, so every encoder
+        must be fitted.
+
+        :return: A JSON-safe pipeline description suitable for
+            :meth:`from_dict`.
+        :raises NotFittedError: If any member encoder is not fitted.
+        """
+        return {
+            "format_version": _PIPELINE_FORMAT_VERSION,
+            "encoder_class": type(self).__name__,
+            "encoders": [encoder.to_dict() for encoder in self.encoders],
+            "similarity_func": self._similarity_func_name,
+        }
+
+    @classmethod
+    def from_dict(cls, state: dict[str, Any]) -> "Pipeline":
+        """
+        Rebuilds a pipeline from a dictionary produced by :meth:`to_dict`.
+
+        :param state: A JSON-safe pipeline description from :meth:`to_dict`.
+        :return: A ready-to-use :class:`Pipeline` instance.
+        """
+        # Imported lazily to avoid an import cycle with the encoder registry.
+        from ._reconstruct import encoder_from_dict
+
+        encoders = [
+            cast(ImageEncoderBase, encoder_from_dict(encoder_state))
+            for encoder_state in state["encoders"]
+        ]
+        return cls(encoders, similarity_func=state["similarity_func"])
 
     def encode(
         self,
@@ -81,69 +121,20 @@ class Pipeline(SimilarityMetric):
         image_list = list(iter_images(images, dims=dims, value_range=value_range))
         all_encodings = []
         for metric in self.encoders:
-            a = metric.flatten  # each encoder has to be flattened to be usable here. Saving the original state temporarily
-            metric.flatten = True
+            # Each encoder has to be flattened to be usable here. Encoders that
+            # do not expose a ``flatten`` flag are assumed to already emit flat
+            # ``(num_imgs, feature_dim)`` encodings.
+            has_flatten = hasattr(metric, "flatten")
+            if has_flatten:
+                original_flatten = metric.flatten  # type: ignore[attr-defined]
+                metric.flatten = True  # type: ignore[attr-defined]
             encodings = metric.encode(
                 image_list
             )  # Each of size (num_imgs, feature_dim)
             all_encodings.append(encodings)
-            metric.flatten = a
+            if has_flatten:
+                metric.flatten = original_flatten  # type: ignore[attr-defined]
         return np.hstack(all_encodings)
-
-    def generate_encoding_map(
-        self, image_paths: Iterable[str]
-    ) -> dict[str, FloatNumpyArray]:
-        """
-        Converts a collection of image file paths into a dictionary of
-        ``{image_path: encoded_vector}``.
-
-        This method automatically reads each image, applies the internal
-        encoding pipeline, and stores the resulting descriptor vector.
-
-        :param image_paths: List of image full paths
-        :return: a dictionary where keys are image paths and values are descriptor vectors of the
-                corresponding images
-        """
-        images = (read_image_rgb(path) for path in image_paths)
-        return dict(zip(image_paths, self.encode(images), strict=True))
-
-    @property
-    def similarity_func(self) -> SimilarityFunc:
-        return self._similarity_func
-
-    @similarity_func.setter
-    def similarity_func(self, func: SimilarityFunc) -> None:
-        dummy1, dummy2 = np.random.rand(10, 10), np.random.rand(10, 10)
-        self._similarity_func = check_desired_output(func, dummy1, dummy2)
-
-    def similarity_score(
-        self,
-        images1: ImageInput,
-        images2: ImageInput,
-        *,
-        dims: str = "HWC",
-        value_range: tuple[float, float] = (0.0, 255.0),
-    ) -> Float32NumpyArray:
-        """
-        Computes vector encodings for two images and calculates the similarity score between them.
-
-        :param images1: First (batch of) image(s) as ``MatLike``.
-        :param images2: Second (batch of) image(s) as ``MatLike``.
-        :param dims: Axis-label string, one character per array axis in order:
-            ``"H"`` = height (rows), ``"W"`` = width (columns), ``"C"`` = channels
-            (e.g. RGB), ``"B"`` = batch size. For example, ``"HWC"`` is height ×
-            width × channels (NumPy/OpenCV single-image layout, **default**);
-            ``"CHW"`` is channels × height × width (PyTorch single-image layout);
-            ``"BCHW"`` is batch × channels × height × width (PyTorch batched layout).
-            See :mod:`pyvisim.typing`.
-        :param value_range: The ``(low, high)`` range the input values live in;
-            converted into the canonical ``[0, 255]`` range.
-        :return: Similarity matrix between the two image batches.
-        """
-        vector1 = self.encode(images1, dims=dims, value_range=value_range)
-        vector2 = self.encode(images2, dims=dims, value_range=value_range)
-        result = self.similarity_func(vector1, vector2)
-        return np.asarray(result, dtype=np.float32)
 
     # def fit(self, images: Iterable[np.ndarray], reduce_dimension: bool = False, reduce_factor: int=2) -> None:
     #     """
@@ -169,5 +160,5 @@ class Pipeline(SimilarityMetric):
         return (
             f"Pipeline(\n"
             f"encoders=[{encoders_str}],\n"
-            f"similarity_func={self._similarity_func.__name__ if hasattr(self._similarity_func, '__name__') else str(self._similarity_func)})"
+            f"similarity_func={self._similarity_func_name})"
         )

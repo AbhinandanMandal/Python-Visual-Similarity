@@ -1,13 +1,14 @@
 [build-system]
-requires = ["setuptools>=64.0", "wheel"]
+requires = ["setuptools>=77.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyvisim"
-version = "0.1.3"
+version = "0.6.0"
 description = "A Python library for image similarity analysis using Image Encoders and Neural Networks"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "Nhat Huy Vu", email = "vunhathuy234@gmail.com"}
 ]
@@ -22,21 +23,14 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "h5py",
-    "joblib",
-    "matplotlib",
     "numpy",
+    "Pillow",
     "opencv-python",
-    "pandas",
     "platformdirs",
-    "pyaml",
     "PyYAML",
+    "safetensors",
     "scikit-learn",
     "scipy",
-    "seaborn",
-    "torch",
-    "torchvision",
-    "torchaudio",
     "tqdm",
     "requests",
 ]
@@ -45,6 +39,23 @@ dependencies = [
 #   uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 # Replace cu124 with the CUDA version matching your system (e.g. cu121, cu118).
 
+# Optional extras. Install with e.g. 'pip install "pyvisim[nn]"'.
+[project.optional-dependencies]
+# Deep-learning features and encoders (DeepConvFeature, CLIPEncoder, the
+# datasets and neural_networks modules) built on top of torch / torchvision /
+# open_clip.
+nn = [
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "open_clip_torch",
+]
+# Accelerated nearest-neighbour search and retrieval (ImageIndex,
+# InMemoryImageEmbeddingStore, ImageRetriever) built on top of faiss.
+search = [
+    "faiss-cpu",
+]
+
 [project.urls]
 Homepage = "https://github.com/MechaCritter/Python-Visual-Similarity"
 
@@ -52,7 +63,11 @@ Homepage = "https://github.com/MechaCritter/Python-Visual-Similarity"
 include = ["pyvisim", "pyvisim.*"]
 
 [tool.setuptools.package-data]
-pyvisim = ["res/model_files/*.pkl", "res/logging_config.yaml"]
+pyvisim = [
+    "res/model_files/*.encoder",
+    "res/logging_config.yaml",
+    "py.typed",
+]
 
 # Dependencies groups to isolate test env from production env
 [dependency-groups]
@@ -90,9 +105,9 @@ plugins = ["numpy.typing.mypy_plugin"]
 # Third-party libraries that ship without type stubs or a py.typed marker.
 [[tool.mypy.overrides]]
 module = [
-  "joblib.*",
+  "faiss.*",
+  "open_clip.*",
   "scipy.*",
-  "seaborn.*",
   "sklearn.*",
   "torchvision.*",
   "tqdm.*",
@@ -101,8 +116,9 @@ module = [
 ignore_missing_imports = true
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py310"
 line-length = 88
+extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = [

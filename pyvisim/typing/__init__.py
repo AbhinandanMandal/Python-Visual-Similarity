@@ -1,6 +1,8 @@
 """Public types used in pyvisim"""
 
-from ._typing import (
+from .encoders import Encoder
+from .index import SearchIndex
+from .numeric import (
     Float32NumpyArray,
     Float64NumpyArray,
     FloatNumpyArray,
@@ -12,6 +14,7 @@ from ._typing import (
     UInt8NumpyArray,
     _to_image_list,
 )
+from .store import EmbeddingStore
 
 __all__ = [
     "MatLike",
@@ -23,5 +26,8 @@ __all__ = [
     "FloatNumpyArray",
     "IntNumpyArray",
     "SimilarityFunc",
+    "Encoder",
+    "SearchIndex",
+    "EmbeddingStore",
     "_to_image_list",
 ]

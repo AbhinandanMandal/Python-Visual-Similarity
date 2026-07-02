@@ -4,10 +4,10 @@
 </p>
 
 <!-- Added badges to convey project readiness/branding (example placeholders) -->
-![License](https://img.shields.io/badge/license-MIT-brightgreen)
-![Version](https://img.shields.io/badge/version-0.1.3-blue)
+![License](https://img.shields.io/github/license/MechaCritter/Python-Visual-Similarity)
+![Version](https://img.shields.io/pypi/v/pyvisim)
 ![Status](https://img.shields.io/badge/status-pre--release-orange)
-![Python](https://img.shields.io/badge/Python-3.10--3.14-brightgreen)
+![Python](https://img.shields.io/pypi/pyversions/pyvisim)
 ![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen)
 
 # Welcome to `pyvisim`!
@@ -17,8 +17,8 @@ and the Siamese Neural Networks.
 
 ## Table of Contents
 
-1. [Why **pyvisim**](#why-pyvisim)
-2. [Installation](#installation)
+1. [Installation](#installation)
+2. [Why **pyvisim**](#why-pyvisim)
 3. [Pretrained Models](#pretrained-models)
 4. [Contributing](#contributing)
 5. [Get in Touch](#get-in-touch)
@@ -38,77 +38,20 @@ For a technical deep-dive into the library internals, see the [developer documen
 > The first stable release will have the version tag `v1.0.0` and will come approximately by the
 > end of `August 2026`.
 
-## Why `pyvisim`?
-
-`pyvisim` is designed to provide a simple and efficient way to compare images.
-
-### Quick Start
-
-With just a few lines of code, you can compute the similarity score between two images using the VLAD encoder:
-
-#### Example: Compute Similarity Score Using VLAD
-
-```python
-from pyvisim.encoders import VLADEncoder, KMeansWeights
-from pyvisim.datasets import OxfordFlowerDataset
-
-# Load images from the Oxford Flower Dataset. Has to be NumPy Images!
-dataset = OxfordFlowerDataset()
-image1, *_  = dataset[0]
-image2, *_ = dataset[1]
-
-# Initialize the VLAD encoder with SIFT features and pretrained KMeans weights
-encoder = VLADEncoder(
-    weights=KMeansWeights.OXFORD102_K256_ROOTSIFT
-)
-
-# Compute the similarity score. By default, cosine similarity is used.
-similarity_score = encoder.similarity_score(image1, image2)
-
-print(f"Similarity Score: {similarity_score}")
-```
-
-A fitted encoder can be saved to a `.encoder` file and restored later:
-
-```python
-path = encoder.save_to_disk("vlad_oxford102")  # writes vlad_oxford102.encoder
-encoder = VLADEncoder.load_from_disk(path)
-```
-You can also visit the [introduction notebook](examples/getting_started.ipynb) for more examples.
-
-I also provided various notebooks for different use-cases. Feel free to check them out, and let me know if you
-have any suggestions or questions!
-
-1. **Image Retrieval**  
-   Retrieve the top-k most similar images from a dataset.  
-   - Use encoding methods like VLAD or Fisher Vectors to quickly find the most relevant matches. Please visit
-   [this juptyer notebook](examples/vlad_and_fisher_with_vgg16_deep_features.ipynb) for an example.
-   - Example use: Building a fast image search engine for photo management software.
-
-2. **Deep Learning Embeddings**  
-   - Generate VLAD or Fisher vectors from neural network embeddings, e.g., VGG16 or other models.
-   - Enhance your deep learning pipeline by leveraging traditional encoding methods on top of CNN features.
-
-3. **Image Clustering**  
-   - Cluster images based on their similarities to group them by category or content. An example and benchmarking
-    can be found in [this notebook](examples/clustering_images_using_fv.ipynb).
-   - Useful for organizing unlabeled data or generating pseudo-labels for further training.
-
-4. **Pipeline for Combining Multiple Encoders**  
-   - Chain various encoders in a single pipeline. An example can be found in [this notebook](examples/pipeline.ipynb).
-   - Achieve more robust similarity metrics by blending different feature representations.
-
-5. **Siamese Network (Coming Soon!)**  
-   - Train a neural network to learn a similarity function directly from pairs/triples of images.  
-   - Possible use cases include face recognition, signature verification, or any image-based identity matching.
-
 ## Installation
 
 To use the library, you can simply install it via pip:
 
 ```bash
+```bash
 pip install pyvisim
+# For deep learning features and the OxfordFlowerDataset
+pip install "pyvisim[nn]"
+# For image search feature
+pip install "pyvisim[search]"
 ```
+```
+
 or clone the repository and install it locally:
 
 ```bash
@@ -126,43 +69,152 @@ from pyvisim.datasets import OxfordFlowerDataset
 ```
 For more details on the dataset, please refer to the [documentation](pyvisim/datasets/README.md).
 
+## Why `pyvisim`?
+
+`pyvisim` is designed to provide a simple and efficient way to compare images.
+
+### Quick Start
+
+With just a few lines of code, you can compute the similarity score between two images using the VLAD encoder:
+
+#### Example: Compute Similarity Score Using VLAD
+
+```python
+from pyvisim.encoders import VLADEncoder, PretrainedVLAD
+from pyvisim.datasets import OxfordFlowerDataset  # needs "nn" extra: install with `pip install "pyvisim[nn]"`
+
+# Load images from the Oxford Flower Dataset. Has to be NumPy Images!
+dataset = OxfordFlowerDataset()
+image1, *_  = dataset[0]
+image2, *_ = dataset[1]
+
+# Load a bundled pretrained VLAD encoder (RootSIFT features, k=256).
+# The feature extractor and similarity metric come with it.
+encoder = VLADEncoder.from_pretrained(PretrainedVLAD.OXFORD102_K256_ROOTSIFT)
+
+# Compute the similarity score. By default, cosine similarity is used.
+similarity_score = encoder.similarity_score(image1, image2)
+
+print(f"Similarity Score: {similarity_score}")
+```
+
+By default the encoder uses cosine similarity. To use a different metric, pass
+its name; `"cosine"`, `"euclidean"`, `"l1"` and `"manhattan"` are supported:
+
+```python
+encoder = VLADEncoder.from_pretrained(PretrainedVLAD.OXFORD102_K256_ROOTSIFT)
+encoder.similarity_func = "euclidean"
+```
+
+A fitted encoder can be saved to a `.encoder` file and restored later:
+
+```python
+path = encoder.save_to_disk("vlad_oxford102")  # writes vlad_oxford102.encoder
+encoder = VLADEncoder.load_from_disk(path)
+```
+You can also visit the [introduction notebook](https://github.com/MechaCritter/Python-Visual-Similarity-Examples/blob/master/notebooks/getting_started.ipynb) for more examples.
+
+I also provided various notebooks for different use-cases. Feel free to check them out, and let me know if you
+have any suggestions or questions!
+
+1. **Image Retrieval**  
+   Retrieve the top-k most similar images from a dataset.  
+   - Use encoding methods like VLAD or Fisher Vectors to quickly find the most relevant matches. Please visit
+   [this juptyer notebook](https://github.com/MechaCritter/Python-Visual-Similarity-Examples/blob/master/notebooks/vlad_and_fisher_with_vgg16_deep_features.ipynb) for an example.
+   - For large galleries, build an `InMemoryImageEmbeddingStore` over your image paths;
+     it indexes the embeddings and searches them for you (needs the `search` extra:
+     `pip install "pyvisim[search]"`):
+
+     ```python
+     from pyvisim.image_store import InMemoryImageEmbeddingStore
+
+     store = InMemoryImageEmbeddingStore(
+         gallery_paths, encoder, "ivf-flat",
+         quantizer="inner_product", index_params={"nlist": 100},
+     )
+     results = store.retrieve_top_k_similar(query_images, k=5)
+     ```
+     See the [retrieval docs](docs/retrieval/README.md) for more information.
+   - Example use: Building a fast image search engine for photo management software.
+
+2. **Deep Learning Embeddings**  
+   - Generate VLAD or Fisher vectors from neural network embeddings, e.g., VGG16 or other models.
+   - Enhance your deep learning pipeline by leveraging traditional encoding methods on top of CNN features.
+   - Or skip the aggregation entirely and use `CLIPEncoder` for ready-made CLIP embeddings.
+   - The VGG16 deep-feature path (`DeepConvFeature`) and `CLIPEncoder` both need the `nn`
+   extra: `pip install "pyvisim[nn]"`.
+
+3. **Image Clustering**  
+   - Cluster images based on their similarities to group them by category or content. An example and benchmarking
+    can be found in [this notebook](https://github.com/MechaCritter/Python-Visual-Similarity-Examples/blob/master/notebooks/clustering_images_using_fv.ipynb).
+   - Useful for organizing unlabeled data or generating pseudo-labels for further training.
+
+4. **Pipeline for Combining Multiple Encoders**  
+   - Chain various encoders in a single pipeline. An example can be found in [this notebook](https://github.com/MechaCritter/Python-Visual-Similarity-Examples/blob/master/notebooks/pipeline.ipynb).
+   - Achieve more robust similarity metrics by blending different feature representations.
+
+5. **Siamese Network (Coming Soon!)**  
+   - Train a neural network to learn a similarity function directly from pairs/triples of images.  
+   - Possible use cases include face recognition, signature verification, or any image-based identity matching.
+
 ## Pretrained Models
 
-> [!CAUTION]
-> **Deprecated:** Loading pretrained models via the `KMeansWeights`/`GMMWeights` enums is deprecated
-> and will be removed in a future release. Train an encoder with `learn()` and persist it with `save_to_disk()`/
-> `load_from_disk()` (`.encoder` files) instead.
+pyvisim ships ready-to-use pretrained encoders trained on the Oxford-102 flower
+dataset. Each one is a bundled `.encoder` file that already includes the right
+feature extractor and the cosine similarity metric, so loading one gives you a
+working encoder in a single line:
 
-The following pretrained models are provided for clustering and dimensionality reduction. All clustering
-models were trained with `k=256`. The choice of `k` was made arbitrarily
+```python
+from pyvisim.encoders import (
+    VLADEncoder,
+    FisherVectorEncoder,
+    PretrainedVLAD,
+    PretrainedFisher,
+)
+
+vlad = VLADEncoder.from_pretrained(PretrainedVLAD.OXFORD102_K256_ROOTSIFT)
+fisher = FisherVectorEncoder.from_pretrained(PretrainedFisher.OXFORD102_K256_VGG16_PCA)
+```
+
+The SIFT/RootSIFT variants work on the base install. The `*_VGG16*` variants build a
+`DeepConvFeature`, so they need the `nn` extra: `pip install "pyvisim[nn]"`.
+
+All clustering models were trained with `k=256`. The choice of `k` was made arbitrarily
 based on the paper <sup>[5](#references)</sup>, where the authors tested with `k=32`, `64`, `128`, `256`, `512`, and so on.
 Since higher values would take too long, I chose `k=256` as a balance between performance and computational cost.
+Variants ending in `_PCA` reduce the feature dimensions by half with PCA before clustering.
 
-### KMeans Models
+> [!CAUTION]
+> **Deprecated:** the old `weights=KMeansWeights.X` / `weights=GMMWeights.X` constructor
+> argument is deprecated and will be removed in `1.0.0`. Use `from_pretrained()` with the
+> `PretrainedVLAD`/`PretrainedFisher` enums (or `load_from_disk()` with a `.encoder` file)
+> instead. The enums above load the exact same trained models.
 
-You can access these weights by importing `KMeansWeights` from the `pyvisim.encoders` module.
+### VLAD encoders (`PretrainedVLAD`)
 
-| Model Name                             | Features Extracted From | PCA Applied | Feature Dimensions |
-|----------------------------------------|-------------------------|-------------|--------------------|
-| `OXFORD102_K256_VGG16_PCA`             | Last Conv Layer (VGG16) | Yes         | 257                |
-| `OXFORD102_K256_VGG16`                 | Last Conv Layer (VGG16) | No          | 514                |
-| `OXFORD102_K256_ROOTSIFT_PCA`          | RootSIFT features       | Yes         | 64                 |
-| `OXFORD102_K256_ROOTSIFT`              | RootSIFT features       | No          | 128                |
-| `OXFORD102_K256_SIFT_PCA`              | SIFT features           | Yes         | 64                 |
-| `OXFORD102_K256_SIFT`                  | SIFT features           | No          | 128                |
+Loaded with `VLADEncoder.from_pretrained(...)`.
 
-### Gaussian Mixture Models (GMMWeights)
+| Member                        | Feature Extractor       | PCA Applied | Feature Dimensions |
+|-------------------------------|-------------------------|-------------|--------------------|
+| `OXFORD102_K256_VGG16_PCA`    | Last Conv Layer (VGG16) | Yes         | 257                |
+| `OXFORD102_K256_VGG16`        | Last Conv Layer (VGG16) | No          | 514                |
+| `OXFORD102_K256_ROOTSIFT_PCA` | RootSIFT features       | Yes         | 64                 |
+| `OXFORD102_K256_ROOTSIFT`     | RootSIFT features       | No          | 128                |
+| `OXFORD102_K256_SIFT_PCA`     | SIFT features           | Yes         | 64                 |
+| `OXFORD102_K256_SIFT`         | SIFT features           | No          | 128                |
 
-You can access these weights by importing `GMMWeights` from the `pyvisim.encoders` module.
+### Fisher Vector encoders (`PretrainedFisher`)
 
-| Model Name                             | Features Extracted From    | PCA Applied | Feature Dimensions |
-|----------------------------------------|----------------------------|-------------|--------------------|
-| `OXFORD102_K256_VGG16_PCA`             | Last Conv Layer (VGG16)    | Yes         | 257                |
-| `OXFORD102_K256_VGG16`                 | Last Conv Layer (VGG16)    | No          | 514                |
-| `OXFORD102_K256_ROOTSIFT_PCA`          | RootSIFT features          | Yes         | 64                 |
-| `OXFORD102_K256_ROOTSIFT`              | RootSIFT features          | No          | 128                |
-| `OXFORD102_K256_SIFT_PCA`              | SIFT features              | Yes         | 64                 |
-| `OXFORD102_K256_SIFT`                  | SIFT features              | No          | 128                |
+Loaded with `FisherVectorEncoder.from_pretrained(...)`.
+
+| Member                        | Feature Extractor       | PCA Applied | Feature Dimensions |
+|-------------------------------|-------------------------|-------------|--------------------|
+| `OXFORD102_K256_VGG16_PCA`    | Last Conv Layer (VGG16) | Yes         | 257                |
+| `OXFORD102_K256_VGG16`        | Last Conv Layer (VGG16) | No          | 514                |
+| `OXFORD102_K256_ROOTSIFT_PCA` | RootSIFT features       | Yes         | 64                 |
+| `OXFORD102_K256_ROOTSIFT`     | RootSIFT features       | No          | 128                |
+| `OXFORD102_K256_SIFT_PCA`     | SIFT features           | Yes         | 64                 |
+| `OXFORD102_K256_SIFT`         | SIFT features           | No          | 128                |
 
 ### Notes
 1. **Feature Extraction**:
@@ -196,6 +248,7 @@ If you have any questions or just want to say hi, feel free to:
 
 The features below are planned for future releases:
 
+- With `v1.0.0`, remove the deprecated `weights` constructor argument and the `_CLUSTERING_TO_PCA_MAPPING` internal variable, since they are no longer needed with the new `from_pretrained()` API.
 - Implement the **siamese network**.
 - Add **tensor sketch approximation** and **mutual information** analysis for Fisher Vector, according to this
 paper by Weixia Zhang, Jia Yan, Wenxuan Shi, Tianpeng Feng, and Dexiang Deng <sup>[1](#references)</sup>

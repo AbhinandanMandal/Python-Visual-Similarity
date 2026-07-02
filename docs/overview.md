@@ -13,21 +13,27 @@ pyvisim/
 ├── _utils.py            cosine_similarity, image IO, clustering + plotting helpers
 ├── _errors.py           Custom exceptions
 ├── typing/              Public types and helper methods
-├── eval.py              Retrieval metrics (top-k, mAP, accuracy)
+├── eval.py              Retrieval metrics (mAP, top-k accuracy)
+├── functional.py        retrieve_top_k_similar
 ├── encoders/            VLAD, Fisher Vector, Pipeline, pretrained weights
+├── image_store/         InMemoryImageEmbeddingStore: indexed embedding gallery
 ├── clustering/          KMeans, GaussianMixtureModel, PCA
 ├── features/            SIFT, RootSIFT, DeepConvFeature, Lambda
+├── retrieval/           image indexes + ImageRetriever
 ├── datasets/            OxfordFlowerDataset
 └── neural_networks/     Siamese network (planned, not yet implemented)
 ```
 
 Per-area docs:
 
-- [Typing](typing.md): Public types (`MatLike`, `ImageInput`).
+- [Typing](typing.md): Public types (`MatLike`, `ImageInput`, `Encoder`).
 - [Encoders](encoders/): how images become vectors.
+- [Image store](image_store.md): the indexed embedding gallery you search.
 - [Clustering](clustering/): the KMeans, GMM, and PCA models the encoders build their
   vocabulary with.
 - [Features](features/): how local descriptors are extracted from an image.
+- [Retrieval](retrieval/): search indexes and the `ImageRetriever` façade for fast
+  top-k image search over a store.
 - [Neural networks](neural_networks/): planned Siamese network.
 - [Dataset](dataset/): the bundled Oxford Flowers dataset class.
 
@@ -70,19 +76,27 @@ Everything is built on the two abstract base classes in
   numeric array. Use the `dims` string (e.g. `"HWC"`, `"BCHW"`) to describe the axis
   layout, and `value_range` to rescale float inputs into `[0, 255]`. See
   [typing.md](typing.md).
-- **Similarity function is pluggable and guarded.** Any callable taking two `(N, D)`
-  and `(M, D)` arrays and returning an `(N, M)` matrix can be used. On assignment it
-  is probed with dummy input; if it does not return the expected shape,
-  fall back to a row-by-row loop. Default is cosine similarity.
-- **Trained encoders persist to `.encoder` files.** `save_to_disk` / `load_from_disk`
-  serialize the fitted clustering model, PCA, and normalization settings. This replaces
-  the deprecated `KMeansWeights` / `GMMWeights` enum loading path, which still works for
-  now but warns. See [encoders/weights.md](encoders/weights.md).
+- **Similarity metric is chosen by name.** `similarity_func` takes one of the built-in
+  metric names: `"cosine"` (default), `"euclidean"`, `"l1"` or `"manhattan"`.
+- **Trained encoders persist to safetensors `.encoder` files.** `save_to_disk` /
+  `load_from_disk` capture everything (clustering model, PCA, normalization settings,
+  similarity metric and feature extractor), so loading only needs the path. Bundled
+  pretrained encoders load via `from_pretrained`.
+  See [encoders/weights.md](encoders/weights.md).
+
+## Retrieval
+
+[`functional.py`](../pyvisim/functional.py) holds `retrieve_top_k_similar`, the
+entry point for ranking a gallery against query images. Give it a batch of query
+images and an [`InMemoryImageEmbeddingStore`](image_store.md) and it returns one
+ranked `list[Candidate]` per query, where each `Candidate` carries a `path` and a
+`score`. The store does the heavy lifting: it builds a FAISS index (IVF-Flat or
+IVF-PQ) over the gallery embeddings, and `store.retrieve_top_k_similar(...)` (or the
+[`ImageRetriever`](retrieval/) façade) runs the search through it.
 
 ## Evaluation
 
 [`eval.py`](../pyvisim/eval.py) provides methods to compute the performance
 of the retrieval pipeline, given the ground-truth labels. Currently available:
-- `retrieve_top_k_similar`: return the top-k most similar items to a query.
 - `top_k_map`: mean Average Precision over a set of queries.
 - `top_k_accuracy`: fraction of queries whose top-k contains a label match.

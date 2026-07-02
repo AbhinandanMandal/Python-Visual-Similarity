@@ -3,19 +3,43 @@ from typing import Any, cast
 import numpy as np
 
 from .._base_classes import FeatureExtractorBase
-from .._utils import cosine_similarity
+from .._config import MODEL_FILES_PATH
 from ..clustering import PCA, ClusteringModelBase, KMeans
-from ..encoders._base_encoder import ImageEncoderBase, KMeansWeights
+from ..encoders._base_encoder import (
+    ClusteringBasedEncoder,
+    KMeansWeights,
+    _PretrainedEncoder,
+)
 from ..typing import (
     Float32NumpyArray,
     FloatNumpyArray,
     ImageInput,
-    SimilarityFunc,
 )
 from .utils import iter_images
 
 
-class VLADEncoder(ImageEncoderBase):
+class PretrainedVLAD(_PretrainedEncoder):
+    """
+    Bundled pretrained VLAD encoders trained on the Oxford-102 flower dataset
+    with ``k=256`` clusters. Load one with :meth:`VLADEncoder.from_pretrained`.
+
+    Variants differ by the feature extractor (RootSIFT, SIFT or VGG16 deep
+    features) and whether PCA dimensionality reduction was applied.
+    """
+
+    OXFORD102_K256_ROOTSIFT = f"{MODEL_FILES_PATH}/vlad_oxford102_k256_rootsift.encoder"
+    OXFORD102_K256_ROOTSIFT_PCA = (
+        f"{MODEL_FILES_PATH}/vlad_oxford102_k256_rootsift_pca.encoder"
+    )
+    OXFORD102_K256_SIFT = f"{MODEL_FILES_PATH}/vlad_oxford102_k256_sift.encoder"
+    OXFORD102_K256_SIFT_PCA = f"{MODEL_FILES_PATH}/vlad_oxford102_k256_sift_pca.encoder"
+    OXFORD102_K256_VGG16 = f"{MODEL_FILES_PATH}/vlad_oxford102_k256_vgg16.encoder"
+    OXFORD102_K256_VGG16_PCA = (
+        f"{MODEL_FILES_PATH}/vlad_oxford102_k256_vgg16_pca.encoder"
+    )
+
+
+class VLADEncoder(ClusteringBasedEncoder):
     """
     This class encodes images into VLAD descriptor vectors
     using a chosen feature extractor and a K-Means clustering model,
@@ -46,8 +70,8 @@ class VLADEncoder(ImageEncoderBase):
     :param norm_order: Norm order for normalization (default: 2).
     :param epsilon: Small constant to avoid division by zero.
     :param flatten: Whether to flatten the computed descriptor vector (default: True).
-    :param similarity_func: A function that takes two batches of vectors and returns a similarity score
-    matrix with size (batch_1_size, batch_2_size).
+    :param similarity_func: Name of the built-in similarity metric to use. One of
+        ``"cosine"`` (default), ``"euclidean"``, ``"l1"`` or ``"manhattan"``.
     :param raise_error_when_pca_incompatible: When set to True, if the new clustering model has a different input size
                                         than the PCA model's output size, the PCA model will be reset to None.
 
@@ -63,7 +87,7 @@ class VLADEncoder(ImageEncoderBase):
     def __init__(
         self,
         feature_extractor: FeatureExtractorBase | None = None,
-        weights: KMeansWeights | None = None,
+        weights: KMeansWeights | None = None,  # TODO: removed with version 1.0.0
         n_clusters: int = 256,
         kmeans_params: dict[str, Any] | None = None,
         pca_params: dict[str, Any] | None = None,
@@ -71,7 +95,7 @@ class VLADEncoder(ImageEncoderBase):
         norm_order: int = 2,
         epsilon: float = 1e-9,
         flatten: bool = True,
-        similarity_func: SimilarityFunc = cosine_similarity,
+        similarity_func: str = "cosine",
         raise_error_when_pca_incompatible: bool = False,
     ) -> None:
         if weights is not None:
@@ -106,13 +130,12 @@ class VLADEncoder(ImageEncoderBase):
     def clustering_model(self) -> KMeans:
         return cast(KMeans, self._clustering_model)
 
-    @clustering_model.setter
-    def clustering_model(self, model: ClusteringModelBase) -> None:
-        if not isinstance(model, KMeans):
+    def _set_clustering_model(self, clustering_model: ClusteringModelBase) -> None:
+        if not isinstance(clustering_model, KMeans):
             raise ValueError(
-                f"The clustering model must be an instance of pyvisim.clustering.KMeans, not {type(model)}"
+                f"The clustering model must be an instance of pyvisim.clustering.KMeans, not {type(clustering_model)}"
             )
-        self._set_clustering_model(model)
+        super()._set_clustering_model(clustering_model)
 
     def encode(
         self,

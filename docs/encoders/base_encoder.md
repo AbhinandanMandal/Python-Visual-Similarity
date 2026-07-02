@@ -17,7 +17,7 @@ A concrete encoder is the combination of:
 4. a **similarity function**.
 
 The base class wires these together, validates their dimensions, and provides
-`learn`, `save_to_disk`/`load_from_disk`, `encode` (abstract), `generate_encoding_map`,
+`learn`, `to_dict`/`from_dict`, `save_to_disk`/`load_from_disk`, `encode` (abstract),
 and `similarity_score`.
 
 ## Constructing an encoder
@@ -40,14 +40,28 @@ The models start unfitted, so you have to train before encoding:
 - `learn(images)` extracts features from the images, fits the configured PCA first (if
   any), then fits the clustering model. Dimension checks against the feature extractor
   and PCA are deferred until the models are actually fitted.
-- `save_to_disk(path)` writes the fitted clustering model, the PCA model, and the
-  normalization hyperparameters to a versioned `.encoder` file (the `.encoder` suffix is
-  added if you leave it off). It raises `NotFittedError` if you haven't called `learn`
-  yet.
-- `load_from_disk(path)` rebuilds the encoder from that file. The feature extractor and
-  similarity function aren't serialized, so you pass them again here (the feature
-  extractor defaults to `RootSIFT`); its output dimension has to match the saved PCA or
-  clustering model.
+- `save_to_disk(path)` writes the whole encoder to a versioned safetensors `.encoder`
+  file: the fitted clustering model, the PCA model, the normalization hyperparameters,
+  the similarity metric name and the feature-extractor configuration (the `.encoder`
+  suffix is added if you leave it off). It raises `NotFittedError` if you haven't called
+  `learn` yet.
+- `load_from_disk(path)` rebuilds the encoder from that file, feature extractor and
+  similarity metric included, so the path is all you pass. A `DeepConvFeature` using the
+  default torchvision model is rebuilt from default weights; one you supplied yourself
+  has its `state_dict` restored from the file.
+- `from_pretrained(enum)` loads one of the bundled pretrained encoders, see
+  [weights.md](weights.md).
 
 This save/load round-trip is the supported way to reuse a trained encoder. The old
 `weights=` enum path still works but is deprecated, see [weights.md](weights.md).
+
+`to_dict`/`from_dict` expose the same state as a plain dictionary (no file involved);
+`save_to_disk`/`load_from_disk` are thin wrappers over them. This is also how an
+[`InMemoryImageEmbeddingStore`](../image_store.md) embeds the encoder when it serialises
+a gallery.
+
+## Indexing images by file path
+
+To turn a folder of images into a searchable gallery, hand the paths and the fitted
+encoder to an [`InMemoryImageEmbeddingStore`](../image_store.md): it encodes each image,
+indexes the embeddings, and lets you search by similarity.
